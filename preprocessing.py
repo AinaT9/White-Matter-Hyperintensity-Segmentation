@@ -1,0 +1,216 @@
+import nibabel as nib
+import os
+import scipy
+import torch
+import torch.nn as nn 
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+import random 
+import cv2
+import numpy
+from skimage.filters import threshold_otsu
+
+
+def createDictionary(path:str, DICT: dict,location:str):
+    subdirectories= os.listdir(path)
+    for x in subdirectories:
+        DICT["mask"].append(os.path.join(path,x, "wmh.nii.gz"))
+        DICT["pathsT1"].append(os.path.join(path,x, "pre", "T1.nii.gz"))
+        DICT["pathsFLAIR"].append(os.path.join(path,x, "pre", "FLAIR.nii.gz"))
+        DICT["location"].append(location)
+
+def divideDataset(dictio: dict, per=0.8):
+    num_values=len(dictio["pathsFLAIR"])
+    idx= list(range(num_values))
+    random.shuffle(idx)
+    part= int(num_values*per)
+    train ={k: [v[i] for i in idx[:part]] for k, v in dictio.items()}
+    val ={k: [v[i] for i in idx[part:]] for k, v in dictio.items()}
+    return train,val
+
+
+def add_transformation(image,final_size:int,options:bool, isMask:bool):
+    image= transforms.ToTensor()(image)
+    # IF ONLY RESIZE
+    if(options): 
+        if(isMask):resize=transforms.Resize((final_size,final_size), antialias=True,interpolation= transforms.InterpolationMode.NEAREST)
+        else:resize = transforms.Resize((final_size,final_size), antialias=True)
+        image=resize(image)
+        
+    # IF CROP 
+    # ELSE PAD
+    else:
+        if(image.shape[1]!=image.shape[2]):
+            size=image.shape[1] if(image.shape[1]>image.shape[2]) else image.shape[2]
+            pad_width = max(size - image.shape[1], 0)
+            pad_height = max(size -  image.shape[2], 0)    
+            total=(pad_width // 2, pad_height // 2, pad_width - pad_width // 2, pad_height - pad_height // 2) 
+            padding=transforms.Pad(total, fill=0)
+            image=padding(image)
+        
+        if(image.shape[1]>final_size or image.shape[2]>final_size):
+            crop = transforms.CenterCrop((final_size,final_size))
+            image=crop(image)
+    return image
+
+def add_normalization(image,n:int):
+    match n:
+        case 1:
+            return gaussian_normalization(image)
+        case 2:
+            return minmax_normalization(image)
+        case 3:
+            mask= brainMask(image)
+            return gaussian_normalizationFILL(image, mask)
+        case 4:
+            mask= brainMask(image)
+            return minmax_normalizationFILL(image, mask)
+        case 5: 
+            mask= brainfilling(brainMask(image))
+            return gaussian_normalizationFILL(image, mask)
+        case 6:    
+            mask= brainfilling(brainMask(image))
+            return minmax_normalizationFILL(image, mask)
+        
+
+
+#def removeSkull(image)     
+    # IF REMOVE SKULL 
+    ################
+
+def brainMask(image):
+# Aislar cerebro
+    thr=threshold_otsu(image)
+    return image > thr
+
+def brainfilling(image):      
+   return scipy.ndimage.morphology.binary_fill_holes(image)  
+
+def gaussian_normalizationFILL(image, brain):
+    mean= numpy.mean(image[brain==1])
+    std=numpy.std(image[brain==1])
+    norm =(image-mean)/std
+    return norm
+
+def minmax_normalizationFILL(image,brain):
+    min= numpy.min(image[brain==1])
+    max= numpy.max(image[brain==1])
+    norm = (image - min) / (max - min)
+    return norm
+
+def gaussian_normalization(image):
+    mean= numpy.mean(image)
+    std=numpy.std(image)
+    norm =(image-mean)/std
+    return norm
+
+def minmax_normalization(image):
+    min= numpy.min(image)
+    max= numpy.max(image)
+    norm = (image - min) / (max - min)
+    return norm
+
+
+
+def dataAugmentation(image, deg,sca=None,she=None):
+    if(type(image)==numpy.ndarray):image= transforms.ToTensor()(image)
+    transform = transforms.RandomAffine(degrees=deg, translate=(0,0), scale=sca, shear=she)
+    return transform(image)
+
+#ONLY RESIZE OR CROP
+def transform_setter(size: int, hasResize:True):
+    transform=transforms.Compose([
+        lambda x: add_transformation(x, size,hasResize, False),
+    ])
+
+    transform_label=transforms.Compose([
+        lambda x: add_transformation(x, size,hasResize, True),
+    ])
+    return transform, transform_label
+
+#RESIZE/CROP AND NORMALIZATION
+def transform_normalization(size: int, hasResize:True, n:0):
+    transform=transforms.Compose([
+        lambda x: add_normalization(add_transformation(x, size,hasResize, False),n),
+    ])
+
+    transform_label=transforms.Compose([
+        lambda x: add_normalization(add_transformation(x, size,hasResize, True),n),
+    ])
+    return transform, transform_label
+
+class Slices(Dataset):
+    def __init__(self, images, labels, transform, transform_label, slices_deletion):
+        super().__init__()
+        self.paths = images
+        self.labels = labels
+        self.slices_deletion=slices_deletion
+        self.images, self.masks= self.__totalimages__()
+        self.len = len(self.images)
+        self.transform = transform
+        self.transform_label = transform_label
+        
+    def __len__(self): 
+        return self.len
+    
+    def __totalimages__(self):
+        images = []
+        masks = []
+        for path, label in zip(self.paths, self.labels):
+            img = nib.load(path)
+            image= img.get_fdata() 
+
+            lab = nib.load(label)
+            label_img =  lab.get_fdata()
+            label_img[label_img==2]=0
+
+            n_slices=image.shape[2]
+            lim_inf= int(n_slices*0.1)
+            lim_sup=int(n_slices*0.9)
+            if(self.slices_deletion):
+                for ii in range(0,n_slices):
+                    im = image[:, :, ii]
+                    lab=label_img[:, :, ii]
+                    if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(lab)!=0):
+                        images.append(im)
+                        masks.append(lab)           
+            else:
+                for ii in range(0,n_slices):
+                    im = image[:, :, ii]
+                    lab=label_img[:, :, ii]
+                    images.append(im)
+                    masks.append(lab)
+
+        return images, masks            
+
+    def __getitem__(self, index):
+            image=self.images[index]
+            mask= self.masks[index]
+            image = self.transform(image)
+            label_img = self.transform_label(mask)    
+            return image,label_img       
+    
+
+def dataLoaders(path:str,train:dict, val:dict,transform, transform_label, isShuffled=False, size=30,slices_deletion=False):    
+    train_data = Slices(train.get(path), train.get("mask"), transform, transform_label,slices_deletion)
+    print(train_data.len)
+    val_data = Slices(val.get(path), val.get("mask"), transform, transform_label,slices_deletion)
+    print(val_data.len)
+    train_dl = DataLoader(train_data, batch_size=size, shuffle=isShuffled)
+    val_dl = DataLoader(val_data, batch_size=size, shuffle=isShuffled)
+    return train_data, val_data, train_dl,val_dl 
+
+
+class DiceLoss(nn.Module):
+    def __init__(self):
+        super(DiceLoss, self).__init__()
+        self.smooth = 0.0
+
+    def forward(self, y_pred, y_true):
+        y_pred = y_pred[:, 0].contiguous().view(-1)
+        y_true = y_true[:, 0].contiguous().view(-1)
+        intersection = (y_pred * y_true).sum()
+        dsc = (2. * intersection + self.smooth) / (
+            y_pred.sum() + y_true.sum() + self.smooth
+        )
+        return 1. - dsc    
