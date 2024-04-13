@@ -111,7 +111,6 @@ def minmax_normalization(image):
     return norm
 
 
-
 def dataAugmentation(image, deg,sca=None,she=None):
     if(type(image)==numpy.ndarray):image= transforms.ToTensor()(image)
     transform = transforms.RandomAffine(degrees=deg, translate=(0,0), scale=sca, shear=she)
@@ -200,7 +199,62 @@ def dataLoaders(path:str,train:dict, val:dict,transform, transform_label, isShuf
     val_dl = DataLoader(val_data, batch_size=size, shuffle=isShuffled)
     return train_data, val_data, train_dl,val_dl 
 
+class Concatenate(Dataset):
+    def __init__(self, flair, t1, labels, transform, transform_label):
+        super().__init__()
+        self.flair = flair
+        self.t1 = t1
+        self.labels = labels
+        self.images, self.masks= self.__totalimages__()
+        self.len = len(self.images)
+        self.transform = transform
+        self.transform_label = transform_label
+           
+    def __len__(self): 
+        return self.len
+    
+    def __totalimages__(self):
+        images = []
+        masks = []
+        for flair,t1, label in zip(self.flair,self.t1, self.labels):
+            flair = nib.load(flair)
+            flair_im= flair.get_fdata() 
 
+            t1=nib.load(t1)
+            t1_im=t1.get_fdata()
+
+            lab = nib.load(label)
+            label_img =  lab.get_fdata()
+            label_img[label_img==2]=0
+
+            n_slices=t1_im.shape[2]
+            lim_inf= int(n_slices*0.1)
+            lim_sup=int(n_slices*0.9)
+            for ii in range(0,n_slices):
+                t = t1_im[:, :, ii]
+                fl=flair_im[:,:,ii]
+                lab=label_img[:, :, ii]
+                if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(lab)!=0):
+                    im=numpy.concatenate((t[...,numpy.newaxis],fl[...,numpy.newaxis]), axis=2)
+                    images.append(im)
+                    masks.append(lab)           
+        return images, masks            
+
+    def __getitem__(self, index):
+        image=self.images[index]
+        mask= self.masks[index]
+        image = self.transform(image)
+        label_img = self.transform_label(mask)    
+        return image,label_img       
+
+def dataLoadersConcatenate(flair:str,t1:str,train:dict, val:dict,transform, transform_label, isShuffled=False, size=30):    
+    train_data = Concatenate(train.get(flair),train.get(t1), train.get("mask"), transform, transform_label)
+    print(train_data.len)
+    val_data = Slices(val.get(flair),val.get(t1), val.get("mask"), transform, transform_label)
+    print(val_data.len)
+    train_dl = DataLoader(train_data, batch_size=size, shuffle=isShuffled)
+    val_dl = DataLoader(val_data, batch_size=size, shuffle=isShuffled)
+    return train_data, val_data, train_dl,val_dl 
 class DiceLoss(nn.Module):
     def __init__(self):
         super(DiceLoss, self).__init__()
