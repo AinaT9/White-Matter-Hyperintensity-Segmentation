@@ -195,5 +195,10 @@ dependencies:
   - pip:
       - nibabel==5.2.0
       - opencv-python==4.9.0.80
+      - py-cpuinfo==9.0.0
+      - segment-anything==1.0
+      - thop==0.1.1-2209072238
       - torch==2.1.0
       - torchaudio==2.1.0
+      - ultralytics==8.1.47
+prefix: C:\Users\Aina\miniconda3\envs\tfg_aina
