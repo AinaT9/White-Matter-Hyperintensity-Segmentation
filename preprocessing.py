@@ -87,26 +87,26 @@ def brainfilling(image):
    return scipy.ndimage.morphology.binary_fill_holes(image)  
 
 def gaussian_normalizationFILL(image, brain):
-    mean= numpy.mean(image[brain==1])
-    std=numpy.std(image[brain==1])
+    mean= torch.mean(image[brain==1])
+    std=torch.std(image[brain==1])
     norm =(image-mean)/std
     return norm
 
 def minmax_normalizationFILL(image,brain):
-    min= numpy.min(image[brain==1])
-    max= numpy.max(image[brain==1])
+    min= torch.min(image[brain==1])
+    max= torch.max(image[brain==1])
     norm = (image - min) / (max - min)
     return norm
 
 def gaussian_normalization(image):
-    mean= numpy.mean(image)
-    std=numpy.std(image)
+    mean= torch.mean(image)
+    std=torch.std(image)
     norm =(image-mean)/std
     return norm
 
 def minmax_normalization(image):
-    min= numpy.min(image)
-    max= numpy.max(image)
+    min= torch.min(image)
+    max= torch.max(image)
     norm = (image - min) / (max - min)
     return norm
 
@@ -134,7 +134,7 @@ def transform_normalization(size: int, hasResize:True, n:0):
     ])
 
     transform_label=transforms.Compose([
-        lambda x: add_normalization(add_transformation(x, size,hasResize, True),n),
+        lambda x: add_transformation(x, size,hasResize, True)
     ])
     return transform, transform_label
 
