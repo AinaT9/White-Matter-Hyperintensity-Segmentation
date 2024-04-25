@@ -30,7 +30,8 @@ def divideDataset(dictio: dict, per=0.8):
 
 
 def add_transformation(image,final_size:int,options:bool, isMask:bool):
-    image= transforms.ToTensor()(image)
+    if(not torch.is_tensor(image)):
+        image= transforms.ToTensor()(image)
     # IF ONLY RESIZE
     if(options): 
         if(isMask):resize=transforms.Resize((final_size,final_size), antialias=True,interpolation= transforms.InterpolationMode.NEAREST)
@@ -51,25 +52,36 @@ def add_transformation(image,final_size:int,options:bool, isMask:bool):
         if(image.shape[1]>final_size or image.shape[2]>final_size):
             crop = transforms.CenterCrop((final_size,final_size))
             image=crop(image)
+
     return image
 
 def add_normalization(image,n:int):
     match n:
         case 1:
+            image= transforms.ToTensor()(image)
             return gaussian_normalization(image)
         case 2:
+            image= transforms.ToTensor()(image)
             return minmax_normalization(image)
         case 3:
             mask= brainMask(image)
+            image= transforms.ToTensor()(image)
+            mask= transforms.ToTensor()(mask)
             return gaussian_normalizationFILL(image, mask)
         case 4:
             mask= brainMask(image)
+            image= transforms.ToTensor()(image)
+            mask= transforms.ToTensor()(mask)
             return minmax_normalizationFILL(image, mask)
         case 5: 
             mask= brainfilling(brainMask(image))
+            image= transforms.ToTensor()(image)
+            mask= transforms.ToTensor()(mask)
             return gaussian_normalizationFILL(image, mask)
         case 6:    
             mask= brainfilling(brainMask(image))
+            image= transforms.ToTensor()(image)
+            mask= transforms.ToTensor()(mask)
             return minmax_normalizationFILL(image, mask)
         
 
@@ -78,13 +90,21 @@ def add_normalization(image,n:int):
     # IF REMOVE SKULL 
     ################
 
+
+
 def brainMask(image):
 # Aislar cerebro
     thr=threshold_otsu(image)
     return image > thr
 
-def brainfilling(image):      
-   return scipy.ndimage.morphology.binary_fill_holes(image)  
+# def brainfilling(image):   
+#    image_np = image.cpu().numpy()   
+#    image_f=scipy.ndimage.morphology.binary_fill_holes(image_np) 
+#    return torch.tensor(image_f, dtype=torch.bool)
+
+def brainfilling(image):
+    return scipy.ndimage.morphology.binary_fill_holes(image) 
+
 
 def gaussian_normalizationFILL(image, brain):
     mean= torch.mean(image[brain==1])
@@ -130,7 +150,7 @@ def transform_setter(size: int, hasResize:True):
 #RESIZE/CROP AND NORMALIZATION
 def transform_normalization(size: int, hasResize:True, n:0):
     transform=transforms.Compose([
-        lambda x: add_normalization(add_transformation(x, size,hasResize, False),n),
+        lambda x: add_transformation(add_normalization(x,n), size,hasResize, False),
     ])
 
     transform_label=transforms.Compose([
@@ -187,7 +207,8 @@ class Slices(Dataset):
             mask= self.masks[index]
             image = self.transform(image)
             label_img = self.transform_label(mask)    
-            return image,label_img       
+            return image,label_img  
+
     
 
 def dataLoaders(path:str,train:dict, val:dict,transform, transform_label, isShuffled=False, size=30,slices_deletion=False):    
