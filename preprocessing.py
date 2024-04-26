@@ -41,17 +41,26 @@ def add_transformation(image,final_size:int,options:bool, isMask:bool):
     # IF CROP 
     # ELSE PAD
     else:
-        if(image.shape[1]!=image.shape[2]):
-            size=image.shape[1] if(image.shape[1]>image.shape[2]) else image.shape[2]
-            pad_width = max(size - image.shape[1], 0)
-            pad_height = max(size -  image.shape[2], 0)    
+        if (image.shape[1] < final_size or image.shape[2] < final_size):
+            pad_width = max(final_size - image.shape[1], 0)
+            pad_height = max(final_size -  image.shape[2], 0)    
             total=(pad_width // 2, pad_height // 2, pad_width - pad_width // 2, pad_height - pad_height // 2) 
             padding=transforms.Pad(total, fill=0)
             image=padding(image)
+
+        # if(image.shape[1]!=image.shape[2]):
+        #     size=image.shape[1] if(image.shape[1]>image.shape[2]) else image.shape[2]
+        #     pad_width = max(size - image.shape[1], 0)
+        #     pad_height = max(size -  image.shape[2], 0)    
+        #     total=(pad_width // 2, pad_height // 2, pad_width - pad_width // 2, pad_height - pad_height // 2) 
+        #     padding=transforms.Pad(total, fill=0)
+        #     image=padding(image)
         
         if(image.shape[1]>final_size or image.shape[2]>final_size):
             crop = transforms.CenterCrop((final_size,final_size))
             image=crop(image)
+
+        
 
     return image
 
