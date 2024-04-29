@@ -6,11 +6,15 @@ import torch.nn as nn
 
 class UNet(nn.Module):
 
-    def __init__(self, in_channels=3, out_channels=1, init_features=32):
+    def __init__(self, in_channels=3, out_channels=1, init_features=32, is200pad=False, is200crop=False):
         super(UNet, self).__init__()
 
         features = init_features
-        self.encoder1 = UNet._block(in_channels, features, name="enc1")
+        self.is200crop= is200crop
+        if(self.is200crop):
+            self.encoder1 = UNet._block(in_channels, features, name="enc1", k_size=5)
+        else:    
+            self.encoder1 = UNet._block(in_channels, features, name="enc1")
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.encoder2 = UNet._block(features, features * 2, name="enc2")
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -20,10 +24,14 @@ class UNet(nn.Module):
         self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.bottleneck = UNet._block(features * 8, features * 16, name="bottleneck")
-
-        self.upconv4 = nn.ConvTranspose2d(
-            features * 16, features * 8, kernel_size=2, stride=2
-        )
+        if(is200pad):
+            self.upconv4 = nn.ConvTranspose2d(
+                features * 16, features * 8, kernel_size=2, stride=2,output_padding=1
+            )
+        else:
+             self.upconv4 = nn.ConvTranspose2d(
+                features * 16, features * 8, kernel_size=2, stride=2
+            )   
         self.decoder4 = UNet._block((features * 8) * 2, features * 8, name="dec4")
         self.upconv3 = nn.ConvTranspose2d(
             features * 8, features * 4, kernel_size=2, stride=2
@@ -47,6 +55,10 @@ class UNet(nn.Module):
         enc2 = self.encoder2(self.pool1(enc1))
         enc3 = self.encoder3(self.pool2(enc2))
         enc4 = self.encoder4(self.pool3(enc3))
+        if self.is200crop:
+            enc1=enc1[:,:, :-4, :-4]
+            enc2=enc2[:,:, :-2, :-2]
+            enc3=enc3[:, :, :-1, :-1]
 
         bottleneck = self.bottleneck(self.pool4(enc4))
 
@@ -62,10 +74,14 @@ class UNet(nn.Module):
         dec1 = self.upconv1(dec2)
         dec1 = torch.cat((dec1, enc1), dim=1)
         dec1 = self.decoder1(dec1)
-        return torch.sigmoid(self.conv(dec1))
+        output= torch.sigmoid(self.conv(dec1))
+        if(self.is200crop):
+            output =  nn.functional.interpolate(output, size=(200, 200), mode='bilinear', align_corners=False)
+        return output
+
 
     @staticmethod
-    def _block(in_channels, features, name):
+    def _block(in_channels, features, name, k_size=3):
         return nn.Sequential(
             OrderedDict(
                 [
@@ -74,7 +90,7 @@ class UNet(nn.Module):
                         nn.Conv2d(
                             in_channels=in_channels,
                             out_channels=features,
-                            kernel_size=3,
+                            kernel_size=k_size,
                             padding=1,
                             bias=False,
                         ),
@@ -86,7 +102,7 @@ class UNet(nn.Module):
                         nn.Conv2d(
                             in_channels=features,
                             out_channels=features,
-                            kernel_size=3,
+                            kernel_size=k_size,
                             padding=1,
                             bias=False,
                         ),

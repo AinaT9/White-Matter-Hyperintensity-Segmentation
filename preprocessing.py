@@ -10,7 +10,6 @@ import cv2
 import numpy
 from skimage.filters import threshold_otsu
 
-
 def createDictionary(path:str, DICT: dict,location:str):
     subdirectories= os.listdir(path)
     for x in subdirectories:
@@ -47,14 +46,6 @@ def add_transformation(image,final_size:int,options:bool, isMask:bool):
             total=(pad_width // 2, pad_height // 2, pad_width - pad_width // 2, pad_height - pad_height // 2) 
             padding=transforms.Pad(total, fill=0)
             image=padding(image)
-
-        # if(image.shape[1]!=image.shape[2]):
-        #     size=image.shape[1] if(image.shape[1]>image.shape[2]) else image.shape[2]
-        #     pad_width = max(size - image.shape[1], 0)
-        #     pad_height = max(size -  image.shape[2], 0)    
-        #     total=(pad_width // 2, pad_height // 2, pad_width - pad_width // 2, pad_height - pad_height // 2) 
-        #     padding=transforms.Pad(total, fill=0)
-        #     image=padding(image)
         
         if(image.shape[1]>final_size or image.shape[2]>final_size):
             crop = transforms.CenterCrop((final_size,final_size))
