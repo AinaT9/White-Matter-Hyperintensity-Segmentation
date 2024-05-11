@@ -17,6 +17,7 @@ def createDictionary(path:str, DICT: dict,location:str):
         DICT["pathsT1"].append(os.path.join(path,x, "pre", "T1.nii.gz"))
         DICT["pathsFLAIR"].append(os.path.join(path,x, "pre", "FLAIR.nii.gz"))
         DICT["location"].append(location)
+        DICT["ID"].append(x)
 
 def divideDataset(dictio: dict, per=0.8):
     num_values=len(dictio["pathsFLAIR"])
@@ -27,6 +28,21 @@ def divideDataset(dictio: dict, per=0.8):
     val ={k: [v[i] for i in idx[part:]] for k, v in dictio.items()}
     return train,val
 
+def getIDs(dictio:dict):
+    Utrecht=["4","11","17","21","25","29"]
+    Singapore=["50","51","55","62"]
+    Amsterdam=["109","132"]
+    val={k:[] for k in dictio.keys()}
+    train={k:[] for k in dictio.keys()}
+    for i in range(len(dictio["ID"])):
+        k=dictio['ID'][i]
+        if k in Utrecht or k in Singapore or k in Amsterdam:
+            for key in dictio.keys():
+                val[key].append(dictio[key][i])
+        else:
+            for key in dictio.keys():
+                train[key].append(dictio[key][i])
+    return train, val        
 
 def add_transformation(image,final_size:int,options:bool, isMask:bool):
     if(not torch.is_tensor(image)):
@@ -190,6 +206,7 @@ class Slices(Dataset):
                 for ii in range(0,n_slices):
                     im = image[:, :, ii]
                     lab=label_img[:, :, ii]
+                    #eliminar slices en los que no haya que segmentar nada también
                     if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(lab)!=0):
                         images.append(im)
                         masks.append(lab)           
