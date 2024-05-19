@@ -129,8 +129,13 @@ def gaussian_normalizationFILL(image, brain):
     return norm
 
 def minmax_normalizationFILL(image,brain):
-    min= torch.min(image[brain==1])
-    max= torch.max(image[brain==1])
+    if image[brain==1].numel()==0:
+        min = float('inf')
+        max = float('inf')
+    else:    
+        min= torch.min(image[brain==1])
+        max= torch.max(image[brain==1])
+   
     norm = (image - min) / (max - min)
     return norm
 
@@ -243,10 +248,10 @@ class Concatenate(Dataset):
         self.flair = flair
         self.t1 = t1
         self.labels = labels
-        self.images, self.masks= self.__totalimages__()
-        self.len = len(self.images)
         self.transform = transform
         self.transform_label = transform_label
+        self.images, self.masks= self.__totalimages__()
+        self.len = len(self.images)
            
     def __len__(self): 
         return self.len
@@ -273,22 +278,23 @@ class Concatenate(Dataset):
                 fl=flair_im[:,:,ii]
                 lab=label_img[:, :, ii]
                 if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(lab)!=0):
-                    im=numpy.concatenate((t[...,numpy.newaxis],fl[...,numpy.newaxis]), axis=2)
+                    t= self.transform(t)
+                    fl=self.transform(fl)
+                    lab= self.transform_label(lab)
+                    im=numpy.concatenate((t,fl), axis=0)
                     images.append(im)
                     masks.append(lab)           
         return images, masks            
 
     def __getitem__(self, index):
         image=self.images[index]
-        mask= self.masks[index]
-        image = self.transform(image)
-        label_img = self.transform_label(mask)    
-        return image,label_img       
+        mask= self.masks[index]  
+        return image,mask       
 
 def dataLoadersConcatenate(flair:str,t1:str,train:dict, val:dict,transform, transform_label, isShuffled=False, size=30):    
     train_data = Concatenate(train.get(flair),train.get(t1), train.get("mask"), transform, transform_label)
     print(train_data.len)
-    val_data = Slices(val.get(flair),val.get(t1), val.get("mask"), transform, transform_label)
+    val_data = Concatenate(val.get(flair),val.get(t1), val.get("mask"), transform, transform_label)
     print(val_data.len)
     train_dl = DataLoader(train_data, batch_size=size, shuffle=isShuffled)
     val_dl = DataLoader(val_data, batch_size=size, shuffle=isShuffled)
