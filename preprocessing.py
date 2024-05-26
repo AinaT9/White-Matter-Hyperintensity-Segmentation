@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn 
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+import torchvision.transforms.functional as F
 import random 
 import cv2
 import numpy
@@ -152,10 +153,18 @@ def minmax_normalization(image):
     return norm
 
 
-def dataAugmentation(image, deg,sca=None,she=None):
-    if(type(image)==numpy.ndarray):image= transforms.ToTensor()(image)
-    transform = transforms.RandomAffine(degrees=deg, translate=(0,0), scale=sca, shear=she)
-    return transform(image)
+def dataAugmentation(image,imageMask, deg,sca=None,she=None):
+    if(not torch.is_tensor(image)):
+        image= transforms.ToTensor()(image)
+    if(not torch.is_tensor(imageMask)) :   
+        imageMask= transforms.ToTensor()(imageMask)
+    transform_params = transforms.RandomAffine.get_params(degrees=deg, translate=(0,0), scale_ranges=sca, shears=she, img_size=image.size())    
+    image= F.affine(image, *transform_params)
+    imageMask = F.affine(imageMask, *transform_params)
+    return image,imageMask
+
+
+
 
 #ONLY RESIZE OR CROP
 def transform_setter(size: int, hasResize:True):
@@ -299,6 +308,38 @@ def dataLoadersConcatenate(flair:str,t1:str,train:dict, val:dict,transform, tran
     train_dl = DataLoader(train_data, batch_size=size, shuffle=isShuffled)
     val_dl = DataLoader(val_data, batch_size=size, shuffle=isShuffled)
     return train_data, val_data, train_dl,val_dl 
+
+def generateAugmentation(trainData:Concatenate, size):
+    images=[]
+    masks =[]
+    for _ in range(0,size):
+        item= random.randint(0,trainData.__len__())
+        image, mask=trainData.__getitem__(item)
+        n = random.randint(1,3)
+        if(n==1):
+            image,mask=dataAugmentation(image,mask,(-15,15),None,None)
+        elif(n==2):
+            image,mask=dataAugmentation(image,mask,(0,0),(0.9,1.1),None)
+        elif(n==3):  
+            image,mask=dataAugmentation(image,mask,(0,0),None,(-18,18))
+        images.append(image)
+        masks.append(mask) 
+    return images, mask             
+
+class Augmentation(Dataset):
+    def __init__(self, images, masks):
+        super().__init__()
+        self.images = images
+        self.masks = masks
+        self.len = len(self.images)
+           
+    def __len__(self): 
+        return self.len     
+
+    def __getitem__(self, index):
+        image=self.images[index]
+        mask= self.masks[index]  
+        return image,mask    
 class DiceLoss(nn.Module):
     def __init__(self):
         super(DiceLoss, self).__init__()
