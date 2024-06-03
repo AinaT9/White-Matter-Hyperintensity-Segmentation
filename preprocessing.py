@@ -153,15 +153,18 @@ def minmax_normalization(image):
     return norm
 
 
-def dataAugmentation(image,imageMask, deg,sca=None,she=None):
-    if(not torch.is_tensor(image)):
-        image= transforms.ToTensor()(image)
+def dataAugmentation(imageF,imageT,imageMask, deg,sca=None,she=None):
+    if(not torch.is_tensor(imageF)):
+        imageF= transforms.ToTensor()(imageF)
+    if(not torch.is_tensor(imageT)):
+        imageT= transforms.ToTensor()(imageT)
     if(not torch.is_tensor(imageMask)) :   
         imageMask= transforms.ToTensor()(imageMask)
-    transform_params = transforms.RandomAffine.get_params(degrees=deg, translate=(0,0), scale_ranges=sca, shears=she, img_size=image.size())    
-    image= F.affine(image, *transform_params)
+    transform_params = transforms.RandomAffine.get_params(degrees=deg, translate=(0,0), scale_ranges=sca, shears=she, img_size=imageF.size())    
+    imageF= F.affine(imageF, *transform_params)
+    imageT= F.affine(imageT, *transform_params)
     imageMask = F.affine(imageMask, *transform_params)
-    return image,imageMask
+    return imageF,imageT,imageMask
 
 
 
@@ -313,8 +316,8 @@ def generateAugmentation(trainData:Concatenate, size):
     images=[]
     masks =[]
     for _ in range(0,size):
-        item= random.randint(0,trainData.__len__())
-        image, mask=trainData.__getitem__(item)
+        item= random.randint(0,trainData.__len__()-1)
+        image, mask=trainData[item]
         n = random.randint(1,3)
         if(n==1):
             image,mask=dataAugmentation(image,mask,(-15,15),None,None)
@@ -324,22 +327,83 @@ def generateAugmentation(trainData:Concatenate, size):
             image,mask=dataAugmentation(image,mask,(0,0),None,(-18,18))
         images.append(image)
         masks.append(mask) 
-    return images, mask             
+    return images, masks             
 
 class Augmentation(Dataset):
-    def __init__(self, images, masks):
+    def __init__(self, imagesFlair, imagesT1, labels, transform, transformLabel,size):
         super().__init__()
-        self.images = images
-        self.masks = masks
-        self.len = len(self.images)
-           
+        self.imagesFlair, self.labels = self.readImages(imagesFlair, labels)
+        self.imagesT1, _ = self.readImages(imagesT1, labels)
+        self.transform = transform
+        self.transform_label = transformLabel
+        self.size = size
+        self.imagesAUX, self.masksAUX = self.generateConcatenation()
+        self.len = len(self.imagesAUX)
+        self.images, self.masks = self.generateAugmentation()
+        
+        
     def __len__(self): 
-        return self.len     
+        return self.len
+    
+    def readImages(self, paths, pathsM):
+        images =[]
+        masks = []
+        for flair, label in zip(paths, pathsM):
+            flair = nib.load(flair)
+            flair_im= flair.get_fdata(dtype=numpy.float32)
+            n_slices=flair_im.shape[2]
+
+            lab = nib.load(label)
+            label_img =  lab.get_fdata(dtype=numpy.float32)
+            label_img[label_img==2]=0
+
+
+            lim_inf= int(n_slices*0.1)
+            lim_sup=int(n_slices*0.9)
+            for ii in range(0,n_slices):
+                fl=flair_im[:,:,ii]
+                l = label_img[:,:,ii]
+                if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(l)!=0):
+                    images.append(fl)
+                    masks. append(l)
+        return images, masks
+    
+    def generateConcatenation(self):
+        images = []
+        masks = []
+        for fl,t, lab in zip(self.imagesFlair,self.imagesT1, self.labels):
+                    t= self.transform(t)
+                    fl=self.transform(fl)
+                    lab= self.transform_label(lab)
+                    im=numpy.concatenate((fl,t), axis=0)
+                    images.append(im)
+                    masks.append(lab)           
+        return images, masks            
+
+
+    def  generateAugmentation(self):
+        for _ in range(0,self.size):
+            item = random.randint(0,self.len-1)
+            imageF = self.imagesFlair[item]
+            imageT1= self.imagesT1[item]
+            mask = self.masksAUX[item]
+            n = random.randint(1,3)
+            if(n==1):
+                fl,t,mask=dataAugmentation(imageF,imageT1,mask,(-15,15),None,None)
+            elif(n==2):
+                fl,t,mask=dataAugmentation(imageF,imageT1,mask,(0,0),(0.9,1.1),None)
+            elif(n==3):  
+                fl,t,mask=dataAugmentation(imageF,imageT1,mask,(0,0),None,(-18,18))
+            im=numpy.concatenate((fl,t), axis=0)
+            self.imagesAUX.append(im)
+            self.masksAUX.append(mask)           
+        return self.imagesAUX, self.masksAUX      
 
     def __getitem__(self, index):
         image=self.images[index]
-        mask= self.masks[index]  
-        return image,mask    
+        mask= self.masks[index] 
+        return image,mask   
+     
 class DiceLoss(nn.Module):
     def __init__(self):
         super(DiceLoss, self).__init__()
