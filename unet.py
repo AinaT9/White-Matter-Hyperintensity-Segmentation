@@ -6,12 +6,13 @@ import torch.nn as nn
 
 class UNet(nn.Module):
 
-    def __init__(self, in_channels=3, out_channels=1, init_features=32, is200pad=False, is200crop=False):
+    def __init__(self, in_channels=3, out_channels=1, init_features=32, is200pad=False, is200crop=False, is180=False):
         super(UNet, self).__init__()
 
         features = init_features
         self.is200crop= is200crop
-        if(self.is200crop):
+        self.is180 = is180
+        if(self.is200crop or self.is180):
             self.encoder1 = UNet._block(in_channels, features, name="enc1", k_size=5)
         else:    
             self.encoder1 = UNet._block(in_channels, features, name="enc1")
@@ -77,6 +78,8 @@ class UNet(nn.Module):
         output= torch.sigmoid(self.conv(dec1))
         if(self.is200crop):
             output =  nn.functional.interpolate(output, size=(200, 200), mode='bilinear', align_corners=False)
+        if(self.is180):
+            output =  nn.functional.interpolate(output, size=(180, 180), mode='bilinear', align_corners=False)   
         return output
 
 
