@@ -2,6 +2,7 @@
 3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation
 Paper URL: https://arxiv.org/abs/1606.06650
 Author: Amir Aghdam
+obtained from: https://github.com/AghdamAmir/3D-UNet
 """
 
 from torch import nn

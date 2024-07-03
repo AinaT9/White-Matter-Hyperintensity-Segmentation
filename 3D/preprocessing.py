@@ -87,11 +87,12 @@ class ICPR(Dataset):
         mask = nib.load(label)
         mask_im= mask.get_fdata()
         #mask_im = mask_im[39:-39,41:-41,39:-39] 
-
-        flair_im=resize(flair_im, (88, 88, 88), preserve_range=True)
-        mask_im = resize(mask_im, (88, 88, 88), preserve_range=True)
+        
+        flair_im=resize(flair_im, (128, 128, 48), preserve_range=True)
+        mask_im = resize(mask_im, (128, 128, 48), preserve_range=True)
         image = self.transform(flair_im)
         mask = self.transform_label(mask_im)
+        
         return image,mask    
     
 
@@ -117,10 +118,9 @@ class MICAI(Dataset):
 
         mask = nib.load(label)
         mask_im= mask.get_fdata()
-       
-
-        flair_im=resize(flair_im, (24, 24, 24), preserve_range=True)
-        mask_im = resize(mask_im, (24, 24, 24), preserve_range=True)
+        
+        flair_im= resize(flair_im, (128, 128, 24), preserve_range=True)
+        mask_im = resize(mask_im, (128, 128, 24), preserve_range=True)
 
         image = self.transform(flair_im)
         mask = self.transform_label(mask_im)
