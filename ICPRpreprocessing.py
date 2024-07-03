@@ -57,6 +57,18 @@ def createDictionary(path:str, DICT: dict):
             DICT["pathsT1"].append(os.path.join(path,x, y,t1_file))
             DICT["pathsFLAIR"].append(os.path.join(path,x, y,flair_file))
             DICT["pathsT2"].append(os.path.join(path,x, y,t2_file))
+            
+def createDictionaryTEST(path:str, DICT: dict):
+    subdirectories= os.listdir(path)
+    for x in subdirectories:
+        t1_file = f"{x}_T1.nii.gz"
+        t2_file = f"{x}_T2.nii.gz"
+        flair_file = f"{x}_FLAIR.nii.gz"
+        mask_file = f"{x}_MASK.nii.gz"
+        DICT["mask"].append(os.path.join(path,x,mask_file))
+        DICT["pathsT1"].append(os.path.join(path,x,t1_file))
+        DICT["pathsFLAIR"].append(os.path.join(path,x,flair_file))
+        DICT["pathsT2"].append(os.path.join(path,x,t2_file))
 
 def divideDataset(dictio: dict, per=0.8):
     num_values=len(dictio["pathsFLAIR"])
@@ -249,14 +261,13 @@ class Slices(Dataset):
             label_img[label_img==2]=0
 
             n_slices=image.shape[2]
-            lim_inf= int(n_slices*0.1)
-            lim_sup=int(n_slices*0.9)
             if(self.slices_deletion):
                 for ii in range(0,n_slices):
                     im = image[:, :, ii]
                     lab=label_img[:, :, ii]
                     #eliminar slices en los que no haya que segmentar nada también
-                    if((ii>lim_inf and ii<lim_sup) or cv2.countNonZero(lab)!=0):
+                    if(cv2.countNonZero(im)!=0):
+                        print(ii)
                         images.append(im)
                         masks.append(lab)           
             else:
@@ -369,16 +380,13 @@ def generateAugmentation(trainData:Concatenate, size):
     return images, mask             
 
 class Augmentation(Dataset):
-    def __init__(self, imagesFlair, imagesT1, imagesT2, labels, transform, transformLabel,size):
+    def __init__(self, imagesFlair,labels, transform, transformLabel,size):
         super().__init__()
         self.imagesFlair, self.labels = self.readImages(imagesFlair, labels)
-        self.imagesT1, _ = self.readImages(imagesT1, labels)
-        self.imagesT2, _ = self.readImages(imagesT2, labels)
         self.transform = transform
         self.transform_label = transformLabel
         self.size = size
-        self.imagesAUX, self.masksAUX = self.generateConcatenation()
-        self.len = len(self.imagesAUX)
+        self.len = len(self.imagesFlair)
         self.images, self.masks = self.generateAugmentation()
         
         
@@ -396,50 +404,33 @@ class Augmentation(Dataset):
             lab = nib.load(label)
             label_img =  lab.get_fdata(dtype=numpy.float32)
             label_img[label_img==2]=0
-
-
-            lim_inf= int(n_slices*0.1)
-            lim_sup=int(n_slices*0.9)
             for ii in range(0,n_slices):
                 fl=flair_im[:,:,ii]
                 l = label_img[:,:,ii]
-                if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(l)!=0):
+                if (cv2.countNonZero(fl)!=0):
                     images.append(fl)
                     masks. append(l)
         return images, masks
-    
-    def generateConcatenation(self):
-        images = []
-        masks = []
-        for fl,t, lab in zip(self.imagesFlair,self.imagesT1,self.imagesT2, self.labels):
-                    t2 = self.transform(t2)
-                    t = self.transform(t)
-                    fl = self.transform(fl)
-                    lab = self.transform_label(lab)
-                    im = numpy.concatenate((fl,t,t2), axis=0)
-                    images.append(im)
-                    masks.append(lab)           
-        return images, masks            
+          
 
 
     def  generateAugmentation(self):
+        imagesAUX=[]
+        masksAUX =[]
         for _ in range(0,self.size):
             item = random.randint(0,self.len-1)
             imageF = self.imagesFlair[item]
-            imageT1= self.imagesT1[item]
-            imageT2 = self.imagesT2[item]
-            mask = self.masksAUX[item]
+            mask = self.masks[item]
             n = random.randint(1,3)
             if(n==1):
-                fl,t,t2,mask=dataAugmentation(imageF,imageT1,imageT2, mask,(-15,15),None,None)
+                fl,mask=dataAugmentation(imageF, mask,(-15,15),None,None)
             elif(n==2):
-                fl,t,t2,mask=dataAugmentation(imageF,imageT1,imageT2, mask,(0,0),(0.9,1.1),None)
+                fl,mask=dataAugmentation(imageF, mask,(0,0),(0.9,1.1),None)
             elif(n==3):  
-                fl,t,t2,mask=dataAugmentation(imageF,imageT1,imageT2, mask,(0,0),None,(-18,18))
-            im=numpy.concatenate((fl,t,t2), axis=2)
-            self.imagesAUX.append(im)
-            self.masksAUX.append(mask)           
-        return self.imagesAUX, self.masksAUX      
+                fl,mask=dataAugmentation(imageF,mask,(0,0),None,(-18,18))
+            imagesAUX.append(fl)
+            masksAUX.append(mask)           
+        return imagesAUX, masksAUX      
 
     def __getitem__(self, index):
         image=self.images[index]
