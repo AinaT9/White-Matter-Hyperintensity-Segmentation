@@ -285,17 +285,18 @@ class Concatenate(Dataset):
             n_slices=t1_im.shape[2]
             lim_inf= int(n_slices*0.1)
             lim_sup=int(n_slices*0.9)
-            for ii in range(0,n_slices):
+            #for ii in range(0,n_slices):
+            for ii in range(lim_inf,lim_sup):
                 t = t1_im[:, :, ii]
                 fl=flair_im[:,:,ii]
                 lab=label_img[:, :, ii]
-                if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(lab)!=0):
-                    t= self.transform(t)
-                    fl=self.transform(fl)
-                    lab= self.transform_label(lab)
-                    im=numpy.concatenate((t,fl), axis=0)
-                    images.append(im)
-                    masks.append(lab)           
+                #if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(lab)!=0):
+                t= self.transform(t)
+                fl=self.transform(fl)
+                lab= self.transform_label(lab)
+                im=numpy.concatenate((t,fl), axis=0)
+                images.append(im)
+                masks.append(lab)           
         return images, masks            
 
     def __getitem__(self, index):
@@ -360,12 +361,13 @@ class Augmentation(Dataset):
 
             lim_inf= int(n_slices*0.1)
             lim_sup=int(n_slices*0.9)
-            for ii in range(0,n_slices):
+            #for ii in range(0,n_slices):
+            for ii in range(lim_inf,lim_sup):
                 fl=flair_im[:,:,ii]
                 l = label_img[:,:,ii]
-                if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(l)!=0):
-                    images.append(fl)
-                    masks. append(l)
+                #if(ii>lim_inf and ii<lim_sup or cv2.countNonZero(l)!=0):
+                images.append(fl)
+                masks. append(l)
         return images, masks
     
     def generateConcatenation(self):
