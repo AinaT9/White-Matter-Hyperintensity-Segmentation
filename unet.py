@@ -1,3 +1,4 @@
+# model extracted from: https://github.com/mateuszbuda/brain-segmentation-pytorch 
 from collections import OrderedDict
 
 import torch
